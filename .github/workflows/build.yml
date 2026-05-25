@@ -3,8 +3,8 @@ name: Build Windows Installer
 on:
   push:
     tags:
-      - 'v*'          # Spustí se při tagu: git tag v1.0.0 && git push --tags
-  workflow_dispatch:  # Nebo manuálně v GitHub Actions tab
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -17,19 +17,22 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies (skip postinstall)
+        run: npm ci --ignore-scripts
 
-      - name: Generate Prisma client (Windows binary)
+      - name: Generate Prisma client
         run: npx prisma generate
+
+      - name: Install Electron app deps
+        run: npx electron-builder install-app-deps
 
       - name: Build Next.js
         run: npm run next:build
 
-      - name: Build Electron
+      - name: Compile Electron TypeScript
         run: npm run electron:build
 
       - name: Build Windows installer
@@ -43,27 +46,4 @@ jobs:
           name: windows-installer
           path: |
             release/*.exe
-            release/*.yml
           retention-days: 30
-
-  # Pokud chceš automatický GitHub Release při tagu:
-  release:
-    needs: build-windows
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-installer
-          path: release/
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release/*.exe
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

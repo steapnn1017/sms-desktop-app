@@ -1,10 +1,9 @@
 appId: com.company.sms-desktop-app
 productName: SMS Manager
-copyright: Copyright © 2024 Company
+copyright: Copyright © 2024
 
 directories:
   output: release
-  buildResources: resources
 
 files:
   - dist-electron/**/*
@@ -14,12 +13,6 @@ files:
   - node_modules/@prisma/client/**/*
   - prisma/schema.prisma
 
-extraResources:
-  - from: resources/
-    to: resources/
-    filter:
-      - "**/*"
-
 win:
   target:
     - target: nsis
@@ -28,7 +21,6 @@ win:
     - target: portable
       arch:
         - x64
-  icon: resources/icon.ico
   requestedExecutionLevel: asInvoker
 
 nsis:
@@ -37,14 +29,4 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: SMS Manager
-  installerIcon: resources/icon.ico
-  uninstallerIcon: resources/icon.ico
-  installerHeaderIcon: resources/icon.ico
   runAfterFinish: true
-
-portable:
-  artifactName: SMS-Manager-Portable-${version}.exe
-
-publish:
-  provider: generic
-  url: https://your-server.com/updates/
