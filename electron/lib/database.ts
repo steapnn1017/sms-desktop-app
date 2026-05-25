@@ -1,192 +1,128 @@
-import { PrismaClient } from '@prisma/client'
+import Database from 'better-sqlite3'
 import path from 'path'
 import { app } from 'electron'
 import fs from 'fs'
 import log from 'electron-log'
 
-let prisma: PrismaClient | null = null
+let db: Database.Database | null = null
 
 export function getDatabasePath(): string {
     const userDataPath = app.getPath('userData')
     return path.join(userDataPath, 'sms-manager.db')
 }
 
-export async function initDatabase(): Promise<PrismaClient> {
-    if (prisma) return prisma
+export function initDatabase(): Database.Database {
+    if (db) return db
 
     const dbPath = getDatabasePath()
     const userDataPath = path.dirname(dbPath)
 
-    // Ensure userData directory exists
     if (!fs.existsSync(userDataPath)) {
         fs.mkdirSync(userDataPath, { recursive: true })
     }
 
     log.info('Database path:', dbPath)
 
-    // Set Prisma engine path when running in packaged Electron app
-    // The .node binary is unpacked from ASAR into app.asar.unpacked
-    if (app.isPackaged) {
-        const unpackedPrismaPath = path.join(
-            process.resourcesPath,
-            'app.asar.unpacked',
-            'node_modules',
-            '.prisma',
-            'client'
-        )
-        try {
-            if (fs.existsSync(unpackedPrismaPath)) {
-                const files = fs.readdirSync(unpackedPrismaPath)
-                const engineFile = files.find((f) => f.endsWith('.node'))
-                if (engineFile) {
-                    process.env.PRISMA_QUERY_ENGINE_LIBRARY = path.join(unpackedPrismaPath, engineFile)
-                    log.info('Prisma engine:', process.env.PRISMA_QUERY_ENGINE_LIBRARY)
-                }
-            }
-        } catch (e) {
-            log.warn('Could not set Prisma engine path:', e)
-        }
-    }
+    db = new Database(dbPath)
+    db.pragma('journal_mode = WAL')
+    db.pragma('foreign_keys = ON')
 
-    // Set DATABASE_URL for Prisma
-    process.env.DATABASE_URL = `file:${dbPath}`
-
-    prisma = new PrismaClient({
-        datasources: {
-            db: {
-                url: `file:${dbPath}`,
-            },
-        },
-        log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-    })
-
-    // Run migrations / push schema
-    await runMigrations()
-
-    // Seed default data
-    await seedDefaultData()
+    runMigrations()
+    seedDefaultData()
 
     log.info('Database initialized successfully')
-    return prisma
+    return db
 }
 
-async function runMigrations() {
-    if (!prisma) return
+function runMigrations() {
+    if (!db) return
 
-    try {
-        await prisma.$executeRaw`PRAGMA journal_mode=WAL;`
-        await prisma.$executeRaw`PRAGMA foreign_keys=ON;`
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS customers (
+                                                 id TEXT NOT NULL PRIMARY KEY,
+                                                 name TEXT NOT NULL,
+                                                 phone TEXT NOT NULL UNIQUE,
+                                                 note TEXT,
+                                                 createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+            updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+            );
 
-        await prisma.$executeRaw`
-            CREATE TABLE IF NOT EXISTS "customers" (
-                                                       "id" TEXT NOT NULL PRIMARY KEY,
-                                                       "name" TEXT NOT NULL,
-                                                       "phone" TEXT NOT NULL UNIQUE,
-                                                       "note" TEXT,
-                                                       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                                                       "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        `
-        await prisma.$executeRaw`
-            CREATE TABLE IF NOT EXISTS "sms_templates" (
-                                                           "id" TEXT NOT NULL PRIMARY KEY,
-                                                           "name" TEXT NOT NULL,
-                                                           "content" TEXT NOT NULL,
-                                                           "description" TEXT,
-                                                           "isDefault" BOOLEAN NOT NULL DEFAULT false,
-                                                           "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                                                           "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        `
-        await prisma.$executeRaw`
-            CREATE TABLE IF NOT EXISTS "sms_history" (
-                                                         "id" TEXT NOT NULL PRIMARY KEY,
-                                                         "phone" TEXT NOT NULL,
-                                                         "message" TEXT NOT NULL,
-                                                         "status" TEXT NOT NULL DEFAULT 'pending',
-                                                         "errorMsg" TEXT,
-                                                         "templateId" TEXT,
-                                                         "customerId" TEXT,
-                                                         "orderNumber" TEXT,
-                                                         "price" TEXT,
-                                                         "gatewayMsgId" TEXT,
-                                                         "sentAt" DATETIME,
-                                                         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                                                         "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        `
-        await prisma.$executeRaw`
-            CREATE TABLE IF NOT EXISTS "settings" (
-                                                      "id" TEXT NOT NULL PRIMARY KEY,
-                                                      "key" TEXT NOT NULL UNIQUE,
-                                                      "value" TEXT NOT NULL,
-                                                      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                                                      "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        `
-        log.info('Database tables verified/created')
-    } catch (error) {
-        log.error('Migration error:', error)
-    }
+        CREATE TABLE IF NOT EXISTS sms_templates (
+                                                     id TEXT NOT NULL PRIMARY KEY,
+                                                     name TEXT NOT NULL,
+                                                     content TEXT NOT NULL,
+                                                     description TEXT,
+                                                     isDefault INTEGER NOT NULL DEFAULT 0,
+                                                     createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+            updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+        CREATE TABLE IF NOT EXISTS sms_history (
+                                                   id TEXT NOT NULL PRIMARY KEY,
+                                                   phone TEXT NOT NULL,
+                                                   message TEXT NOT NULL,
+                                                   status TEXT NOT NULL DEFAULT 'pending',
+                                                   errorMsg TEXT,
+                                                   templateId TEXT,
+                                                   customerId TEXT,
+                                                   orderNumber TEXT,
+                                                   price TEXT,
+                                                   gatewayMsgId TEXT,
+                                                   sentAt TEXT,
+                                                   createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+            updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+        CREATE TABLE IF NOT EXISTS settings (
+                                                id TEXT NOT NULL PRIMARY KEY,
+                                                key TEXT NOT NULL UNIQUE,
+                                                value TEXT NOT NULL,
+                                                createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+            updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+    `)
+
+    log.info('Database tables verified/created')
 }
 
-async function seedDefaultData() {
-    if (!prisma) return
+function seedDefaultData() {
+    if (!db) return
 
-    try {
-        const templateCount = await prisma.smsTemplate.count()
-        if (templateCount === 0) {
-            await prisma.smsTemplate.createMany({
-                data: [
-                    {
-                        id: 'tpl_ready',
-                        name: 'Zakázka připravena',
-                        content:
-                            'Dobrý den, Vaše zakázka č. {zakazka} je připravena k vyzvednutí. Cena: {cena} Kč. Těšíme se na Vaši návštěvu!',
-                        description: 'Automatická zpráva o připravení zakázky',
-                        isDefault: true,
-                    },
-                    {
-                        id: 'tpl_received',
-                        name: 'Zakázka přijata',
-                        content:
-                            'Dobrý den, potvrzujeme přijetí Vaší zakázky č. {zakazka}. Budeme Vás informovat o průběhu opravy.',
-                        description: 'Potvrzení přijetí zakázky',
-                        isDefault: false,
-                    },
-                    {
-                        id: 'tpl_reminder',
-                        name: 'Připomínka',
-                        content:
-                            'Dobrý den, připomínáme Vám, že Vaše zakázka č. {zakazka} je připravena k vyzvednutí již {poznamka}. Cena: {cena} Kč.',
-                        description: 'Připomínka nevyzvednuté zakázky',
-                        isDefault: false,
-                    },
-                    {
-                        id: 'tpl_custom',
-                        name: 'Individuální zpráva',
-                        content: '{poznamka}',
-                        description: 'Vlastní text zprávy',
-                        isDefault: false,
-                    },
-                ],
-            })
-            log.info('Default templates seeded')
-        }
-    } catch (error) {
-        log.error('Seed error:', error)
-    }
+    const count = db.prepare('SELECT COUNT(*) as cnt FROM sms_templates').get() as { cnt: number }
+    if (count.cnt > 0) return
+
+    const insert = db.prepare(`
+        INSERT OR IGNORE INTO sms_templates (id, name, content, description, isDefault)
+    VALUES (?, ?, ?, ?, ?)
+    `)
+
+    const insertMany = db.transaction(() => {
+        insert.run('tpl_ready', 'Zakázka připravena',
+            'Dobrý den, Vaše zakázka č. {zakazka} je připravena k vyzvednutí. Cena: {cena} Kč. Těšíme se na Vaši návštěvu!',
+            'Automatická zpráva o připravení zakázky', 1)
+        insert.run('tpl_received', 'Zakázka přijata',
+            'Dobrý den, potvrzujeme přijetí Vaší zakázky č. {zakazka}. Budeme Vás informovat o průběhu opravy.',
+            'Potvrzení přijetí zakázky', 0)
+        insert.run('tpl_reminder', 'Připomínka',
+            'Dobrý den, připomínáme Vám, že Vaše zakázka č. {zakazka} je připravena k vyzvednutí již {poznamka}. Cena: {cena} Kč.',
+            'Připomínka nevyzvednuté zakázky', 0)
+        insert.run('tpl_custom', 'Individuální zpráva',
+            '{poznamka}', 'Vlastní text zprávy', 0)
+    })
+
+    insertMany()
+    log.info('Default templates seeded')
 }
 
-export function getDb(): PrismaClient {
-    if (!prisma) throw new Error('Database not initialized. Call initDatabase() first.')
-    return prisma
+export function getDb(): Database.Database {
+    if (!db) throw new Error('Database not initialized. Call initDatabase() first.')
+    return db
 }
 
-export async function closeDatabase() {
-    if (prisma) {
-        await prisma.$disconnect()
-        prisma = null
+export function closeDatabase() {
+    if (db) {
+        db.close()
+        db = null
         log.info('Database connection closed')
     }
 }

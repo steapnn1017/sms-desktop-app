@@ -8,21 +8,11 @@ directories:
 files:
   - dist-electron/**/*
   - out/**/*
-  - prisma/schema.prisma
   - "!node_modules/**/*"
-  - node_modules/.prisma/**/*
-  - node_modules/@prisma/client/**/*
+  - node_modules/better-sqlite3/build/Release/*.node
 
 asarUnpack:
-  - node_modules/.prisma/**/*
-  - node_modules/@prisma/client/**/*
-  - prisma/schema.prisma
-
-extraResources:
-  - from: node_modules/.prisma
-    to: node_modules/.prisma
-  - from: node_modules/@prisma/client
-    to: node_modules/@prisma/client
+  - "node_modules/better-sqlite3/**/*"
 
 win:
   target:

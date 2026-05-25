@@ -3,122 +3,111 @@ import { getDb } from '../lib/database'
 import log from 'electron-log'
 
 function generateId(): string {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36)
+    return Math.random().toString(36).substring(2) + Date.now().toString(36)
 }
 
 function nowIso(): string {
-  return new Date().toISOString()
+    return new Date().toISOString()
 }
 
 export function registerTemplateHandlers() {
-  // Get all templates
-  ipcMain.handle('templates:getAll', async () => {
-    const db = getDb()
-    try {
-      const templates = await db.$queryRaw`
-        SELECT * FROM sms_templates ORDER BY isDefault DESC, name ASC
-      `
-      return { success: true, data: templates }
-    } catch (error) {
-      log.error('Get templates error:', error)
-      return { success: false, data: [], error: String(error) }
-    }
-  })
+    ipcMain.handle('templates:getAll', async () => {
+        const db = getDb()
+        try {
+            const templates = db.prepare('SELECT * FROM sms_templates ORDER BY isDefault DESC, name ASC').all()
+            return { success: true, data: templates }
+        } catch (error) {
+            log.error('Get templates error:', error)
+            return { success: false, data: [], error: String(error) }
+        }
+    })
 
-  // Get template by ID
-  ipcMain.handle('templates:getById', async (_event, id: string) => {
-    const db = getDb()
-    try {
-      const templates = await db.$queryRaw`SELECT * FROM sms_templates WHERE id = ${id}` as unknown[]
-      return { success: true, data: (templates as unknown[])[0] || null }
-    } catch (error) {
-      log.error('Get template error:', error)
-      return { success: false, data: null, error: String(error) }
-    }
-  })
+    ipcMain.handle('templates:getById', async (_event, id: string) => {
+        const db = getDb()
+        try {
+            const template = db.prepare('SELECT * FROM sms_templates WHERE id = ?').get(id)
+            return { success: true, data: template || null }
+        } catch (error) {
+            log.error('Get template error:', error)
+            return { success: false, data: null, error: String(error) }
+        }
+    })
 
-  // Create template
-  ipcMain.handle('templates:create', async (_event, data) => {
-    const db = getDb()
-    const { name, content, description, isDefault } = data
-    const id = generateId()
-    const now = nowIso()
+    ipcMain.handle('templates:create', async (_event, data) => {
+        const db = getDb()
+        const { name, content, description, isDefault } = data
+        const id = generateId()
+        const now = nowIso()
 
-    try {
-      // If setting as default, unset others
-      if (isDefault) {
-        await db.$executeRaw`UPDATE sms_templates SET isDefault = 0 WHERE isDefault = 1`
-      }
+        try {
+            if (isDefault) {
+                db.prepare('UPDATE sms_templates SET isDefault = 0 WHERE isDefault = 1').run()
+            }
 
-      await db.$executeRaw`
-        INSERT INTO sms_templates (id, name, content, description, isDefault, createdAt, updatedAt)
-        VALUES (${id}, ${name}, ${content}, ${description || null}, ${isDefault ? 1 : 0}, ${now}, ${now})
-      `
-      const created = await db.$queryRaw`SELECT * FROM sms_templates WHERE id = ${id}` as unknown[]
-      return { success: true, data: (created as unknown[])[0] }
-    } catch (error) {
-      log.error('Create template error:', error)
-      return { success: false, error: String(error) }
-    }
-  })
+            db.prepare(`
+                INSERT INTO sms_templates (id, name, content, description, isDefault, createdAt, updatedAt)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).run(id, name, content, description || null, isDefault ? 1 : 0, now, now)
 
-  // Update template
-  ipcMain.handle('templates:update', async (_event, { id, ...data }) => {
-    const db = getDb()
-    const { name, content, description, isDefault } = data
-    const now = nowIso()
+            const created = db.prepare('SELECT * FROM sms_templates WHERE id = ?').get(id)
+            return { success: true, data: created }
+        } catch (error) {
+            log.error('Create template error:', error)
+            return { success: false, error: String(error) }
+        }
+    })
 
-    try {
-      if (isDefault) {
-        await db.$executeRaw`UPDATE sms_templates SET isDefault = 0 WHERE isDefault = 1 AND id != ${id}`
-      }
+    ipcMain.handle('templates:update', async (_event, { id, ...data }) => {
+        const db = getDb()
+        const { name, content, description, isDefault } = data
+        const now = nowIso()
 
-      await db.$executeRaw`
-        UPDATE sms_templates
-        SET name = ${name}, content = ${content}, description = ${description || null},
-            isDefault = ${isDefault ? 1 : 0}, updatedAt = ${now}
-        WHERE id = ${id}
-      `
-      const updated = await db.$queryRaw`SELECT * FROM sms_templates WHERE id = ${id}` as unknown[]
-      return { success: true, data: (updated as unknown[])[0] }
-    } catch (error) {
-      log.error('Update template error:', error)
-      return { success: false, error: String(error) }
-    }
-  })
+        try {
+            if (isDefault) {
+                db.prepare('UPDATE sms_templates SET isDefault = 0 WHERE isDefault = 1 AND id != ?').run(id)
+            }
 
-  // Delete template
-  ipcMain.handle('templates:delete', async (_event, id: string) => {
-    const db = getDb()
-    try {
-      // Check if it's a default/system template
-      const templates = await db.$queryRaw`SELECT id FROM sms_templates WHERE id = ${id}` as unknown[]
-      if (!templates || (templates as unknown[]).length === 0) {
-        return { success: false, error: 'Šablona nenalezena' }
-      }
+            db.prepare(`
+                UPDATE sms_templates
+                SET name = ?, content = ?, description = ?, isDefault = ?, updatedAt = ?
+                WHERE id = ?
+            `).run(name, content, description || null, isDefault ? 1 : 0, now, id)
 
-      await db.$executeRaw`DELETE FROM sms_templates WHERE id = ${id}`
-      return { success: true }
-    } catch (error) {
-      log.error('Delete template error:', error)
-      return { success: false, error: String(error) }
-    }
-  })
+            const updated = db.prepare('SELECT * FROM sms_templates WHERE id = ?').get(id)
+            return { success: true, data: updated }
+        } catch (error) {
+            log.error('Update template error:', error)
+            return { success: false, error: String(error) }
+        }
+    })
 
-  // Preview template with variables
-  ipcMain.handle('templates:preview', async (_event, { content, variables }) => {
-    try {
-      let preview = content
-      if (variables) {
-        Object.entries(variables).forEach(([key, value]) => {
-          preview = preview.replace(new RegExp(`{${key}}`, 'g'), String(value || `{${key}}`))
-        })
-      }
-      return { success: true, preview }
-    } catch (error) {
-      return { success: false, preview: content, error: String(error) }
-    }
-  })
+    ipcMain.handle('templates:delete', async (_event, id: string) => {
+        const db = getDb()
+        try {
+            const template = db.prepare('SELECT id FROM sms_templates WHERE id = ?').get(id)
+            if (!template) return { success: false, error: 'Šablona nenalezena' }
 
-  log.info('Template IPC handlers registered')
+            db.prepare('DELETE FROM sms_templates WHERE id = ?').run(id)
+            return { success: true }
+        } catch (error) {
+            log.error('Delete template error:', error)
+            return { success: false, error: String(error) }
+        }
+    })
+
+    ipcMain.handle('templates:preview', async (_event, { content, variables }) => {
+        try {
+            let preview = content
+            if (variables) {
+                Object.entries(variables).forEach(([key, value]) => {
+                    preview = preview.replace(new RegExp(`{${key}}`, 'g'), String(value || `{${key}}`))
+                })
+            }
+            return { success: true, preview }
+        } catch (error) {
+            return { success: false, preview: content, error: String(error) }
+        }
+    })
+
+    log.info('Template IPC handlers registered')
 }
