@@ -58,39 +58,6 @@
     "ts-node": "^10.9.2",
     "wait-on": "^7.2.0"
   },
-  "build": {
-    "appId": "com.company.sms-desktop-app",
-    "productName": "SMS Manager",
-    "copyright": "Copyright © 2024",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist-electron/**/*",
-      "out/**/*",
-      "prisma/**/*",
-      "node_modules/.prisma/**/*",
-      "node_modules/@prisma/client/**/*"
-    ],
-    "asarUnpack": [
-      "node_modules/.prisma/**/*",
-      "node_modules/@prisma/client/**/*"
-    ],
-    "win": {
-      "target": ["nsis", "portable"],
-      "requestedExecutionLevel": "asInvoker"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "runAfterFinish": true
-    },
-    "linux": {
-      "target": "AppImage"
-    }
-  },
   "author": {
     "name": "Company",
     "email": "info@company.cz"
