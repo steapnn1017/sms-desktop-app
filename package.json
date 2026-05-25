@@ -72,6 +72,10 @@
       "node_modules/.prisma/**/*",
       "node_modules/@prisma/client/**/*"
     ],
+    "asarUnpack": [
+      "node_modules/.prisma/**/*",
+      "node_modules/@prisma/client/**/*"
+    ],
     "win": {
       "target": ["nsis", "portable"],
       "requestedExecutionLevel": "asInvoker"
