@@ -115,24 +115,12 @@ export class SmsGatewayService {
         try {
             log.info('Testing SMS Gateway connection...', this.config.name || this.getApiUrl())
 
-            // Step 1: Check credentials via /health (quick auth check)
-            const healthResponse = await fetch(`${this.getApiUrl()}/health`, {
-                headers: {
-                    Authorization: this.getAuthHeader(),
-                },
-                signal: AbortSignal.timeout(8000),
-            })
-
-            if (healthResponse.status === 401) {
-                return { connected: false, error: 'Neplatné přihlašovací údaje' }
-            }
-
-            // Step 2: Check actual device online status via /devices
+            // Use /devices directly — it validates credentials AND shows device online status
             const devicesResponse = await fetch(`${this.getApiUrl()}/devices`, {
                 headers: {
                     Authorization: this.getAuthHeader(),
                 },
-                signal: AbortSignal.timeout(8000),
+                signal: AbortSignal.timeout(10000),
             })
 
             if (devicesResponse.status === 401) {
@@ -140,13 +128,13 @@ export class SmsGatewayService {
             }
 
             if (!devicesResponse.ok) {
-                return { connected: false, error: `HTTP ${devicesResponse.status}` }
+                return { connected: false, error: `Chyba serveru: HTTP ${devicesResponse.status}` }
             }
 
             const devices = await devicesResponse.json() as Array<{ online?: boolean; name?: string; [key: string]: unknown }>
 
             if (!Array.isArray(devices) || devices.length === 0) {
-                return { connected: false, error: 'Žádné zařízení nenalezeno (spusťte SMS Gateway aplikaci na telefonu)' }
+                return { connected: false, error: 'Žádné zařízení nenalezeno — spusťte SMS Gateway aplikaci na telefonu' }
             }
 
             const onlineDevice = devices.find(d => d.online === true)
