@@ -109,6 +109,7 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
 
+// ─── Single Instance Lock ──────────────────────────────────────────────────────
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
     app.quit()
@@ -122,6 +123,7 @@ if (!gotTheLock) {
     })
 }
 
+// ─── Window Creation ──────────────────────────────────────────────────────────
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1280,
@@ -158,3 +160,186 @@ function createWindow() {
 
     mainWindow.on('close', (event) => {
         if (!isQuitting) {
+            event.preventDefault()
+            mainWindow?.hide()
+        }
+    })
+
+    mainWindow.on('closed', () => {
+        mainWindow = null
+    })
+
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        shell.openExternal(url)
+        return { action: 'deny' }
+    })
+
+    return mainWindow
+}
+
+// ─── Tray ─────────────────────────────────────────────────────────────────────
+function createTray() {
+    const iconPath = getIconPath()
+    const icon = nativeImage.createFromPath(iconPath)
+    const trayIcon = icon.resize({ width: 16, height: 16 })
+
+    tray = new Tray(trayIcon)
+    tray.setToolTip('SMS Manager')
+
+    const contextMenu = Menu.buildFromTemplate([
+        {
+            label: 'Otevřít SMS Manager',
+            click: () => {
+                mainWindow?.show()
+                mainWindow?.focus()
+            },
+        },
+        {
+            label: 'Odeslat SMS',
+            click: () => {
+                mainWindow?.show()
+                mainWindow?.focus()
+                mainWindow?.webContents.send('navigate', '/send')
+            },
+        },
+        { type: 'separator' },
+        {
+            label: 'Ukončit',
+            click: () => {
+                isQuitting = true
+                app.quit()
+            },
+        },
+    ])
+
+    tray.setContextMenu(contextMenu)
+
+    tray.on('click', () => {
+        if (mainWindow?.isVisible()) {
+            mainWindow.hide()
+        } else {
+            mainWindow?.show()
+            mainWindow?.focus()
+        }
+    })
+
+    tray.on('double-click', () => {
+        mainWindow?.show()
+        mainWindow?.focus()
+    })
+}
+
+function getIconPath(): string {
+    const resourcesPath = app.isPackaged
+        ? path.join(process.resourcesPath, 'resources')
+        : path.join(__dirname, '..', 'resources')
+
+    if (process.platform === 'win32') {
+        return path.join(resourcesPath, 'icon.ico')
+    } else if (process.platform === 'darwin') {
+        return path.join(resourcesPath, 'icon.icns')
+    }
+    return path.join(resourcesPath, 'icon.png')
+}
+
+// ─── Window control IPC ───────────────────────────────────────────────────────
+function registerWindowHandlers() {
+    ipcMain.on('window:minimize', () => mainWindow?.minimize())
+    ipcMain.on('window:maximize', () => {
+        if (mainWindow?.isMaximized()) {
+            mainWindow.unmaximize()
+        } else {
+            mainWindow?.maximize()
+        }
+    })
+    ipcMain.on('window:close', () => {
+        if (!isQuitting) {
+            mainWindow?.hide()
+        } else {
+            mainWindow?.close()
+        }
+    })
+    ipcMain.on('window:quit', () => {
+        isQuitting = true
+        app.quit()
+    })
+
+    ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
+
+    ipcMain.handle('notification:show', (_event, { title, body }) => {
+        if (Notification.isSupported()) {
+            new Notification({ title, body, icon: getIconPath() }).show()
+        }
+    })
+
+    ipcMain.handle('shell:openExternal', (_event, url: string) => {
+        shell.openExternal(url)
+    })
+
+    ipcMain.handle('shell:showItemInFolder', (_event, filePath: string) => {
+        shell.showItemInFolder(filePath)
+    })
+}
+
+// ─── App Lifecycle ────────────────────────────────────────────────────────────
+app.whenReady().then(async () => {
+    log.info('App ready, initializing...')
+
+    try {
+        protocol.handle('app', handleAppProtocol)
+        log.info('Protocol handler registered')
+
+        await initDatabase()
+        log.info('Database initialized')
+
+        registerWindowHandlers()
+        registerSmsHandlers()
+        registerCustomerHandlers()
+        registerTemplateHandlers()
+        registerSettingsHandlers()
+        log.info('IPC handlers registered')
+
+        createWindow()
+        createTray()
+
+        if (!isDev) {
+            app.setLoginItemSettings({
+                openAtLogin: false,
+                name: 'SMS Manager',
+                path: process.execPath,
+            })
+        }
+
+        log.info('App ready')
+    } catch (error) {
+        log.error('App initialization error:', error)
+    }
+})
+
+app.on('window-all-closed', () => {
+    if (process.platform === 'darwin') {
+        // Na macOS nechat běžet
+    }
+})
+
+app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow()
+    } else {
+        mainWindow?.show()
+    }
+})
+
+app.on('before-quit', async () => {
+    isQuitting = true
+    await closeDatabase()
+    log.info('App closing, database disconnected')
+})
+
+process.on('uncaughtException', (error) => {
+    log.error('Uncaught exception:', error)
+})
+
+process.on('unhandledRejection', (reason) => {
+    log.error('Unhandled rejection:', reason)
+})
