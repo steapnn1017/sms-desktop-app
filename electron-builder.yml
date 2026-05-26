@@ -8,8 +8,20 @@ directories:
 files:
   - dist-electron/**/*
   - out/**/*
-  - "!node_modules/**/*"
-  - node_modules/better-sqlite3/build/Release/*.node
+  - node_modules/**/*
+  - "!node_modules/electron/**/*"
+  - "!node_modules/electron-builder/**/*"
+  - "!node_modules/@types/**/*"
+  - "!node_modules/typescript/**/*"
+  - "!node_modules/ts-node/**/*"
+  - "!node_modules/autoprefixer/**/*"
+  - "!node_modules/postcss/**/*"
+  - "!node_modules/tailwindcss/**/*"
+  - "!node_modules/concurrently/**/*"
+  - "!node_modules/wait-on/**/*"
+  - "!node_modules/next/**/*"
+  - "!node_modules/react/**/*"
+  - "!node_modules/react-dom/**/*"
 
 asarUnpack:
   - "node_modules/better-sqlite3/**/*"
