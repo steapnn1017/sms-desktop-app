@@ -115,40 +115,60 @@ export class SmsGatewayService {
         try {
             log.info('Testing SMS Gateway connection...', this.config.name || this.getApiUrl())
 
-            // Use /devices directly — it validates credentials AND shows device online status
-            const devicesResponse = await fetch(`${this.getApiUrl()}/devices`, {
-                headers: {
-                    Authorization: this.getAuthHeader(),
-                },
-                signal: AbortSignal.timeout(10000),
+            // Step 1: /health validates credentials reliably
+            const healthResponse = await fetch(`${this.getApiUrl()}/health`, {
+                headers: { Authorization: this.getAuthHeader() },
+                signal: AbortSignal.timeout(8000),
             })
 
-            if (devicesResponse.status === 401) {
+            log.info('Health response status:', healthResponse.status)
+
+            if (healthResponse.status === 401) {
                 return { connected: false, error: 'Neplatné přihlašovací údaje' }
             }
 
-            if (!devicesResponse.ok) {
-                return { connected: false, error: `Chyba serveru: HTTP ${devicesResponse.status}` }
+            if (!healthResponse.ok) {
+                return { connected: false, error: `Chyba serveru: HTTP ${healthResponse.status}` }
             }
 
-            const devices = await devicesResponse.json() as Array<{ online?: boolean; name?: string; [key: string]: unknown }>
+            // Step 2: Try /devices to check if phone is actually online
+            // This endpoint may not be available via cloud proxy — handle gracefully
+            try {
+                const devicesResponse = await fetch(`${this.getApiUrl()}/devices`, {
+                    headers: { Authorization: this.getAuthHeader() },
+                    signal: AbortSignal.timeout(8000),
+                })
 
-            if (!Array.isArray(devices) || devices.length === 0) {
-                return { connected: false, error: 'Žádné zařízení nenalezeno — spusťte SMS Gateway aplikaci na telefonu' }
+                log.info('Devices response status:', devicesResponse.status)
+
+                if (devicesResponse.ok) {
+                    const devices = await devicesResponse.json() as Array<{ online?: boolean; name?: string; [key: string]: unknown }>
+
+                    if (!Array.isArray(devices) || devices.length === 0) {
+                        return { connected: false, error: 'Žádné zařízení nenalezeno — spusťte SMS Gateway aplikaci na telefonu' }
+                    }
+
+                    const onlineDevice = devices.find(d => d.online === true)
+
+                    if (onlineDevice) {
+                        log.info('Online device found:', onlineDevice.name || 'unknown')
+                        return { connected: true, deviceName: onlineDevice.name as string | undefined }
+                    }
+
+                    log.warn('All devices offline')
+                    return { connected: false, error: 'Telefon je offline — otevřete SMS Gateway aplikaci na telefonu' }
+                }
+
+                // /devices not available via this API (e.g. cloud proxy) — credentials OK, status unknown
+                log.warn('/devices returned', devicesResponse.status, '— assuming connected since /health passed')
+                return { connected: true }
+
+            } catch (devErr) {
+                // /devices unreachable but /health passed — treat as connected
+                log.warn('/devices check failed:', devErr, '— assuming connected since /health passed')
+                return { connected: true }
             }
 
-            const onlineDevice = devices.find(d => d.online === true)
-
-            if (onlineDevice) {
-                log.info('SMS Gateway connection OK, online device:', onlineDevice.name || 'unknown')
-                return { connected: true, deviceName: onlineDevice.name as string | undefined }
-            }
-
-            log.warn('All devices offline:', devices.map(d => d.name || 'unknown').join(', '))
-            return {
-                connected: false,
-                error: 'Telefon je offline — otevřete SMS Gateway aplikaci na telefonu',
-            }
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : 'Chyba připojení'
             log.error('Gateway connection test failed:', errorMsg)
