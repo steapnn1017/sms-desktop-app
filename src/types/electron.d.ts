@@ -20,7 +20,7 @@ declare global {
                     customerId?: string
                     orderNumber?: string
                     price?: string
-                }) => Promise<{ success: boolean; messageId?: string; error?: string; historyId?: string }>
+                }) => Promise<{ success: boolean; messageId?: string; error?: string; historyId?: string; usedGateway?: number }>
 
                 getHistory: (params?: {
                     limit?: number
@@ -31,7 +31,7 @@ declare global {
 
                 deleteHistory: (id: string) => Promise<{ success: boolean; error?: string }>
 
-                resend: (id: string) => Promise<{ success: boolean; error?: string }>
+                resend: (id: string) => Promise<{ success: boolean; error?: string; usedGateway?: number }>
 
                 getDailyStats: () => Promise<{
                     today: { total: number | bigint; sent: number | bigint; failed: number | bigint; pending: number | bigint }
@@ -72,16 +72,13 @@ declare global {
 
             templates: {
                 getAll: () => Promise<{ success: boolean; data: unknown[]; error?: string }>
-
                 getById: (id: string) => Promise<{ success: boolean; data: unknown; error?: string }>
-
                 create: (data: {
                     name: string
                     content: string
                     description?: string
                     isDefault?: boolean
                 }) => Promise<{ success: boolean; data?: unknown; error?: string }>
-
                 update: (data: {
                     id: string
                     name: string
@@ -89,9 +86,7 @@ declare global {
                     description?: string
                     isDefault?: boolean
                 }) => Promise<{ success: boolean; data?: unknown; error?: string }>
-
                 delete: (id: string) => Promise<{ success: boolean; error?: string }>
-
                 preview: (data: {
                     content: string
                     variables: Record<string, string>
@@ -100,12 +95,18 @@ declare global {
 
             settings: {
                 getAll: () => Promise<{ success: boolean; data: Record<string, string>; error?: string }>
-
                 get: (key: string) => Promise<{ success: boolean; value: string | null }>
-
                 set: (key: string, value: string) => Promise<{ success: boolean; error?: string }>
 
-                saveGateway: (data: {
+                saveGateway1: (data: {
+                    name: string
+                    apiUrl: string
+                    username: string
+                    password: string
+                }) => Promise<{ success: boolean; error?: string }>
+
+                saveGateway2: (data: {
+                    name: string
                     apiUrl: string
                     username: string
                     password: string
@@ -126,6 +127,11 @@ declare global {
                     username: string
                     password: string
                 }) => Promise<{ connected: boolean; error?: string }>
+
+                testBothGateways: () => Promise<{
+                    gateway1: { connected: boolean; name: string; error?: string }
+                    gateway2: { connected: boolean; name: string; error?: string }
+                }>
 
                 clearHistory: () => Promise<{ success: boolean; error?: string }>
             }

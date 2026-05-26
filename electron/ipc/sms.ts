@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { getDb } from '../lib/database'
-import { getGatewayService } from '../services/sms-gateway'
+import { getActiveGatewayService, SmsGatewayConfig } from '../services/sms-gateway'
 import log from 'electron-log'
 
 function generateId(): string {
@@ -11,23 +11,35 @@ function nowIso(): string {
     return new Date().toISOString()
 }
 
-function getGatewaySettings() {
+function getSetting(key: string): string | null {
     try {
         const db = getDb()
-        const rows = db.prepare(`
-            SELECT key, value FROM settings
-            WHERE key IN ('gateway_api_url', 'gateway_username', 'gateway_password')
-        `).all() as Array<{ key: string; value: string }>
-        const map: Record<string, string> = {}
-        rows.forEach(row => { map[row.key] = row.value })
-        return {
-            apiUrl: map['gateway_api_url'] || 'https://app.sms-gate.app/api/v1',
-            username: map['gateway_username'] || '',
-            password: map['gateway_password'] || '',
-        }
+        const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined
+        return row?.value || null
     } catch {
-        return { apiUrl: 'https://app.sms-gate.app/api/v1', username: '', password: '' }
+        return null
     }
+}
+
+const DEFAULT_API_URL = 'https://api.sms-gate.app/3rdparty/v1'
+
+function getAllGatewayConfigs(): [SmsGatewayConfig, SmsGatewayConfig | null] {
+    const cfg1: SmsGatewayConfig = {
+        name: getSetting('gateway_1_name') || 'Zaměstnanec 1',
+        apiUrl: getSetting('gateway_1_api_url') || DEFAULT_API_URL,
+        username: getSetting('gateway_1_username') || '',
+        password: getSetting('gateway_1_password') || '',
+    }
+
+    const user2 = getSetting('gateway_2_username')
+    const cfg2: SmsGatewayConfig | null = user2 ? {
+        name: getSetting('gateway_2_name') || 'Zaměstnanec 2',
+        apiUrl: getSetting('gateway_2_api_url') || DEFAULT_API_URL,
+        username: user2,
+        password: getSetting('gateway_2_password') || '',
+    } : null
+
+    return [cfg1, cfg2]
 }
 
 export function registerSmsHandlers() {
@@ -45,12 +57,9 @@ export function registerSmsHandlers() {
             log.error('Failed to create SMS history record:', dbErr)
         }
 
-        const settings = getGatewaySettings()
-        const gateway = getGatewayService({
-            apiUrl: settings.apiUrl,
-            username: settings.username,
-            password: settings.password,
-        })
+        const configs = getAllGatewayConfigs()
+        const { service: gateway, gatewayIndex } = await getActiveGatewayService(configs)
+        log.info(`Using gateway ${gatewayIndex} for sending`)
 
         const result = await gateway.sendSms({ phoneNumbers: [phone], message })
 
@@ -68,7 +77,7 @@ export function registerSmsHandlers() {
             log.error('Failed to update SMS history record:', dbErr)
         }
 
-        return { ...result, historyId }
+        return { ...result, historyId, usedGateway: gatewayIndex }
     })
 
     ipcMain.handle('sms:getHistory', async (_event, params) => {
@@ -134,12 +143,9 @@ export function registerSmsHandlers() {
             const record = db.prepare('SELECT * FROM sms_history WHERE id = ?').get(id) as any
             if (!record) return { success: false, error: 'Záznam nenalezen' }
 
-            const settings = getGatewaySettings()
-            const gateway = getGatewayService({
-                apiUrl: settings.apiUrl,
-                username: settings.username,
-                password: settings.password,
-            })
+            const configs = getAllGatewayConfigs()
+            const { service: gateway, gatewayIndex } = await getActiveGatewayService(configs)
+            log.info(`Resending via gateway ${gatewayIndex}`)
 
             const result = await gateway.sendSms({ phoneNumbers: [record.phone], message: record.message })
 
@@ -151,7 +157,7 @@ export function registerSmsHandlers() {
                     .run(result.error || 'Unknown error', nowIso(), id)
             }
 
-            return result
+            return { ...result, usedGateway: gatewayIndex }
         } catch (error) {
             log.error('Resend error:', error)
             return { success: false, error: String(error) }
@@ -193,12 +199,8 @@ export function registerSmsHandlers() {
     })
 
     ipcMain.handle('sms:testConnection', async () => {
-        const settings = getGatewaySettings()
-        const gateway = getGatewayService({
-            apiUrl: settings.apiUrl,
-            username: settings.username,
-            password: settings.password,
-        })
+        const configs = getAllGatewayConfigs()
+        const { service: gateway } = await getActiveGatewayService(configs)
         return gateway.testConnection()
     })
 
