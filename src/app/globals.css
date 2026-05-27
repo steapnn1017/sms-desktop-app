@@ -5,11 +5,15 @@
 @layer base {
     html,
     body {
-        @apply bg-[#f5f5f7] text-[#111827] antialiased;
-        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        @apply bg-[#f4f4f6] text-[#111827] antialiased;
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         overflow: hidden;
         user-select: none;
         -webkit-user-select: none;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+        font-feature-settings: 'kern' 1, 'liga' 1;
     }
 
     input,
@@ -19,34 +23,36 @@
         -webkit-user-select: text;
     }
 
-    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { @apply bg-[#d1d5db] rounded-full; }
     ::-webkit-scrollbar-thumb:hover { @apply bg-[#9ca3af]; }
 
     *:focus-visible {
-        @apply outline-none ring-2 ring-[#f07820]/30 ring-offset-2 ring-offset-[#f5f5f7];
+        @apply outline-none ring-2 ring-[#f07820]/25 ring-offset-1 ring-offset-white;
     }
 }
 
 @layer components {
     .app-card {
-        @apply bg-white border border-[#e5e7eb] rounded-2xl shadow-sm;
+        @apply bg-white border border-[#e5e7eb] rounded-2xl shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)];
     }
 
     .app-input {
-        @apply w-full bg-[#f9fafb] border border-[#e5e7eb] rounded-xl px-3 py-2.5 text-sm
+        @apply w-full bg-white border border-[#e5e7eb] rounded-xl px-3 py-2.5 text-sm
         text-[#111827] placeholder-[#9ca3af]
-        focus:outline-none focus:ring-2 focus:ring-[#f07820]/20 focus:border-[#f07820]/60
-        transition-colors duration-150;
+        focus:outline-none focus:ring-2 focus:ring-[#f07820]/20 focus:border-[#f07820]
+        transition-all duration-150;
     }
 
     .btn-primary {
         @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
-        bg-[#f07820] hover:bg-[#d96a18] active:bg-[#c25e14]
-        text-sm font-semibold text-white shadow-sm
+        bg-[#f07820] hover:bg-[#dc6c1a] active:bg-[#c75f16]
+        text-sm font-semibold text-white
+        shadow-[0_1px_2px_0_rgba(240,120,32,0.3)]
+        hover:shadow-[0_2px_8px_0_rgba(240,120,32,0.35)]
         transition-all duration-150
-        disabled:opacity-50 disabled:cursor-not-allowed;
+        disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none;
     }
 
     .btn-secondary {
@@ -54,13 +60,14 @@
         bg-white hover:bg-[#f9fafb]
         border border-[#e5e7eb] hover:border-[#d1d5db]
         text-sm font-medium text-[#374151] hover:text-[#111827]
+        shadow-[0_1px_2px_0_rgba(0,0,0,0.04)]
         transition-all duration-150
         disabled:opacity-50 disabled:cursor-not-allowed;
     }
 
     .btn-ghost {
         @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl
-        hover:bg-[#f3f4f6]
+        hover:bg-[#f3f4f6] active:bg-[#e5e7eb]
         text-sm font-medium text-[#6b7280] hover:text-[#111827]
         transition-all duration-150;
     }
@@ -73,11 +80,7 @@
     }
 
     .skeleton {
-        @apply bg-[#f3f4f6] rounded-lg animate-pulse;
-    }
-
-    .stat-card {
-        @apply app-card p-5 flex flex-col gap-3 hover:border-[#d1d5db] hover:shadow-md transition-all duration-200;
+        @apply bg-[#f0f0f2] rounded-lg animate-pulse;
     }
 
     .nav-item {
@@ -90,8 +93,27 @@
         @apply text-[#f07820] bg-[#fff4ea] font-semibold;
     }
 
+    .status-badge {
+        @apply inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border;
+    }
+
     .table-row-hover {
-        @apply hover:bg-[#f9fafb] transition-colors duration-100;
+        @apply hover:bg-[#fafafa] transition-colors duration-100;
+    }
+
+    .icon-btn {
+        @apply w-7 h-7 rounded-lg bg-[#f9fafb] border border-[#e5e7eb]
+        hover:border-[#d1d5db] hover:bg-[#f3f4f6]
+        flex items-center justify-center text-[#9ca3af] hover:text-[#374151]
+        transition-all duration-150;
+    }
+
+    .icon-btn-orange {
+        @apply icon-btn hover:border-[#f07820]/40 hover:bg-[#fff4ea] hover:text-[#f07820];
+    }
+
+    .icon-btn-red {
+        @apply icon-btn hover:border-red-300 hover:bg-red-50 hover:text-red-500;
     }
 }
 
@@ -99,13 +121,18 @@
 .no-drag { -webkit-app-region: no-drag; }
 
 @keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(10px); }
+    from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
 }
 @keyframes slideInLeft {
-    from { opacity: 0; transform: translateX(-12px); }
+    from { opacity: 0; transform: translateX(-10px); }
     to { opacity: 1; transform: translateX(0); }
 }
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
 
-.animate-page { animation: fadeInUp 0.2s ease-out; }
-.animate-sidebar-item { animation: slideInLeft 0.2s ease-out both; }
+.animate-page { animation: fadeInUp 0.18s ease-out; }
+.animate-sidebar-item { animation: slideInLeft 0.18s ease-out both; }
+.animate-fade-in { animation: fadeIn 0.15s ease-out; }
