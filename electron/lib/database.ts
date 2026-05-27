@@ -85,29 +85,66 @@ function runMigrations() {
     log.info('Database tables verified/created')
 }
 
+function migrateTemplates() {
+    if (!db) return
+    // Remove old unwanted template
+    db.prepare("DELETE FROM sms_templates WHERE id = 'tpl_received'").run()
+    // Update existing templates to new content with {poznamka} support
+    db.prepare("UPDATE sms_templates SET name = ?, content = ?, description = ?, isDefault = 1 WHERE id = 'tpl_ready'")
+        .run(
+            'Zákazka připravena k vyzvednutí',
+            'Dobrý den, Vaše zakázka č. {zakazka} je připravena k vyzvednutí. Cena: {cena} Kč.{poznamka}',
+            'Automatická zpráva o připravení zakázky'
+        )
+    db.prepare("UPDATE sms_templates SET name = ?, content = ? WHERE id = 'tpl_reminder'")
+        .run(
+            'Připomínka',
+            'Dobrý den, připomínáme Vám nevyzvednutou zakázku č. {zakazka}. Cena: {cena} Kč.{poznamka}'
+        )
+    db.prepare("UPDATE sms_templates SET name = ? WHERE id = 'tpl_custom'")
+        .run('Custom zpráva')
+    log.info('Templates migrated')
+}
+
 function seedDefaultData() {
     if (!db) return
 
     const count = db.prepare('SELECT COUNT(*) as cnt FROM sms_templates').get() as { cnt: number }
-    if (count.cnt > 0) return
 
+    if (count.cnt > 0) {
+        // Existing install — migrate templates to new format
+        migrateTemplates()
+        return
+    }
+
+    // Fresh install — seed 3 templates
     const insert = db.prepare(`
         INSERT OR IGNORE INTO sms_templates (id, name, content, description, isDefault)
-    VALUES (?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?)
     `)
 
     const insertMany = db.transaction(() => {
-        insert.run('tpl_ready', 'Zakázka připravena',
-            'Dobrý den, Vaše zakázka č. {zakazka} je připravena k vyzvednutí. Cena: {cena} Kč. Těšíme se na Vaši návštěvu!',
-            'Automatická zpráva o připravení zakázky', 1)
-        insert.run('tpl_received', 'Zakázka přijata',
-            'Dobrý den, potvrzujeme přijetí Vaší zakázky č. {zakazka}. Budeme Vás informovat o průběhu opravy.',
-            'Potvrzení přijetí zakázky', 0)
-        insert.run('tpl_reminder', 'Připomínka',
-            'Dobrý den, připomínáme Vám, že Vaše zakázka č. {zakazka} je připravena k vyzvednutí již {poznamka}. Cena: {cena} Kč.',
-            'Připomínka nevyzvednuté zakázky', 0)
-        insert.run('tpl_custom', 'Individuální zpráva',
-            '{poznamka}', 'Vlastní text zprávy', 0)
+        insert.run(
+            'tpl_ready',
+            'Zákazka připravena k vyzvednutí',
+            'Dobrý den, Vaše zakázka č. {zakazka} je připravena k vyzvednutí. Cena: {cena} Kč.{poznamka}',
+            'Automatická zpráva o připravení zakázky',
+            1
+        )
+        insert.run(
+            'tpl_reminder',
+            'Připomínka',
+            'Dobrý den, připomínáme Vám nevyzvednutou zakázku č. {zakazka}. Cena: {cena} Kč.{poznamka}',
+            'Připomínka nevyzvednuté zakázky',
+            0
+        )
+        insert.run(
+            'tpl_custom',
+            'Custom zpráva',
+            '{poznamka}',
+            'Vlastní text zprávy',
+            0
+        )
     })
 
     insertMany()

@@ -22,6 +22,12 @@ log.transports.file.level = 'info'
 log.transports.console.level = 'debug'
 log.info('App starting...')
 
+// Fix blurry rendering on Windows high-DPI displays
+if (process.platform === 'win32') {
+    app.commandLine.appendSwitch('high-dpi-support', '1')
+    app.commandLine.appendSwitch('force-device-scale-factor', '1')
+}
+
 // ─── Custom Protocol ───────────────────────────────────────────────────────────
 // Musí být voláno PŘED app.whenReady()
 protocol.registerSchemesAsPrivileged([
@@ -132,7 +138,7 @@ function createWindow() {
         minHeight: 640,
         frame: false,
         transparent: false,
-        backgroundColor: '#0b0b0b',
+        backgroundColor: '#f5f5f7',
         titleBarStyle: 'hidden',
         trafficLightPosition: { x: 12, y: 14 },
         webPreferences: {
